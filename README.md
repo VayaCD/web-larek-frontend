@@ -265,7 +265,10 @@ type THeaderRenderArgs = {
 ```
 
 Доступный список событий описан типом `THeaderEventHandlers`:
-
+```
+Обработчик клика по корзине.
+Вешается на `.header__basket` внутри компонента Header.
+```
 ```ts
 type THeaderEventHandlers = {
 	onClick?: (args: { _event: MouseEvent }) => void;
@@ -291,6 +294,14 @@ type TModalRenderArgs<T extends object> = {
 open() {}
 // Закрыть модальное окно
 close() {}
+```
+
+Поиск элементов `.modal__close` и `.modal__content` внутри модального контейнера.
+```
+	this._HTMLButtonElement = this._element.querySelector('.modal__close');
+	this._HTMLElement = this._element.querySelector('.modal__content');
+
+	this._element.addEventListener('click', this._handleClick.bind(this));
 ```
 
 Доступные события для использования объектом класса `EventEmitter` описаны перечислением `ModalEvents`:
@@ -488,3 +499,30 @@ type TProductPreviewRenderArgs = {
 ```
 
 Использует список событий типа `TProductEventHandlers`
+
+	#### Контроллер
+`PageController` Блокирует/разблокирует скролл при открытии/закрытии модалок.
+```ts
+	modal.on(ModalEvents.OPEN,  () => page.render({ isLocked: true }));
+	modal.on(ModalEvents.CLOSE, () => page.render({ isLocked: false }));
+```
+
+`HeaderController` Обновляет счётчик корзины, слушает клик по иконке и инициализирует корзину.
+```ts
+	model.on(AppStateEvents.BASKET_UPDATE, () => header.render({ counter: model.basket.size }));
+	header.onClick(() => model.initBasket());
+```
+
+`ModalController` Управляет открытием/закрытием модалки и рендерит вложенный View.
+```ts
+	view.onClick(({ _event }) => _event.target === view.element && view.close());
+	view.render({ content: nestedView });
+```
+
+`ProductPreviewController` Открывает модалку с деталями и добавляет товар в корзину.
+```ts
+	model.on(AppStateEvents.PREVIEW_UPDATE, ({ data }) =>
+		preview.render({ ...data.item, buttonText: 'В корзину', isDisabled: false })
+	);
+	preview.onClick(() => model.addBasketItem(model.getPreview()));
+```
