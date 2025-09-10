@@ -1,355 +1,169 @@
 import './scss/styles.scss';
-
-import { CDN_URL, API_URL, settings } from './utils/constants';
-import { EventEmitter } from './components/base/EventEmitter';
-import { ShopAPI } from './components/special/ShopAPI';
-import { AppStateModelEvents, AppStateModel } from './models/global/AppState';
-import { IOrder, IProduct, TOrderStep } from './types';
-import { ProductsView } from './components/catalog/Products';
-import {
-	cloneTemplate,
-	ensureElement,
-	formatPrice,
-	getKeyByValueTranslation,
-} from './utils/utils';
-import { ProductView, TProductRenderArgs } from './components/catalog/Product';
-import { TViewNested } from './components/base/View';
-import { PageView } from './components/global/Page';
-import { HeaderView } from './components/global/Header';
-import { ModalView, ModalViewEvents } from './components/global/Modal';
-import {
-	ProductPreviewView,
-	TProductPreviewRenderArgs,
-} from './components/catalog/ProductPreview';
-import {
-	BasketItemView,
-	TBasketItemRenderArgs,
-} from './components/basket/BasketItem';
-import { BasketView, TBasketRenderArgs } from './components/basket/Basket';
-import {
-	OrderShipmentView,
-	TOrderShipmentRenderArgs,
-} from './components/order/OrderShipment';
-import {
-	OrderContactsView,
-	TOrderContactsRenderArgs,
-} from './components/order/OrderContacts';
-import {
-	OrderSuccessView,
-	TOrderSuccessRenderArgs,
-} from './components/order/OrderSuccess';
+import { Modal } from './components/base/Global/Modal';
+import { ProductsApi, IOrder } from './components/base/Global/Api';
+import { Card } from './components/base/Global/Card';
+import { EventEmitter } from './components/base/Base/events';
+import { PreviewModal } from './components/base/Global/PreviewModal';
+import { IProductItem } from './types';
+import { BasketModal } from './components/base/Global/BasketModal';
+import { Basket } from './components/base/Global/Basket';
+import { OrderModal } from './components/base/Global/OrderModal';
+import { ContactsModal } from './components/base/Global/ContactsModal';
+import { SuccessModal } from './components/base/Global/SuccessModal';
 
 
-const eventEmitter = new EventEmitter();
+// Инициализация API
+const API_URL = `${process.env.API_ORIGIN}/api/weblarek`;
+const events = new EventEmitter();
+const api = new ProductsApi(API_URL);
 
-const api = new ShopAPI(CDN_URL, API_URL);
+// Инициализация корзины
+const basket = new Basket(events);
 
-const appStateModel = new AppStateModel({}, eventEmitter);
+// Инициализация модальных окон
+const previewModal = new PreviewModal(document.querySelector('#modal-container') as HTMLElement, events);
+const basketModal = new BasketModal(document.querySelector('#basket-modal') as HTMLElement, events);
+const orderModal = new OrderModal(document.querySelector('#order-modal') as HTMLElement, events, [], 0);
+const contactsModal = new ContactsModal(document.querySelector('#contacts-modal') as HTMLElement, events, {}, [], 0);
+const successModal = new SuccessModal(document.querySelector('#success-modal') as HTMLElement, events);
+let currentOrderData: any = {};
+let currentBasketItems: IProductItem[] = [];
+let currentTotalPrice: number = 0;
 
-const pageView = new PageView({
-	element: ensureElement('.page'),
-	eventEmitter,
+events.on('card:click', (data: { data: IProductItem }) => {
+    previewModal.show(data.data);
+});
+// Обработка добавления в корзину из модалки предпросмотра
+events.on('product:add-to-basket', (data: { product: IProductItem }) => {
+    basket.addItem(data.product);
 });
 
-const headerView = new HeaderView({
-	element: ensureElement('.header'),
-	eventEmitter,
-	eventHandlers: {
-		onClick: () => {
-			appStateModel.initBasket();
-		},
-	},
+events.on('basket:get-state', (data: { callback: (items: IProductItem[]) => void }) => {
+    data.callback(basket.getItems());
 });
 
-const modalView = new ModalView({
-	element: ensureElement('#modal-container'),
-	eventEmitter,
+// Обработка клика по кнопке корзины в шапке
+const basketButton = document.querySelector('.header__basket');
+if (basketButton) {
+    basketButton.addEventListener('click', () => {
+        basketModal.show();
+    });
+}
+
+// Оформление заказа из корзины
+events.on('basket:checkout', (data: { items: IProductItem[], total: number }) => {
+    currentBasketItems = data.items;
+    currentTotalPrice = data.total;
+    console.log('Basket checkout:', { items: currentBasketItems, total: currentTotalPrice });
+    basketModal.close();
+    orderModal.show();
 });
 
-const productsView = new ProductsView({
-	element: ensureElement('main.gallery'),
-	eventEmitter,
+// Завершение первого шага заказа
+events.on('order:step1-complete', (orderData: any) => {
+    currentOrderData = { ...orderData };
+    console.log('Order step1 complete:', currentOrderData);
+    orderModal.close();
+    
+    const contactsModal = new ContactsModal(
+        document.querySelector('#contacts-modal') as HTMLElement,
+        events,
+        currentOrderData,
+        currentBasketItems, 
+        currentTotalPrice  
+    );
+    contactsModal.show();
 });
 
-const basketView = new BasketView({
-	element: cloneTemplate('#basket'),
-	eventEmitter,
-	eventHandlers: {
-		onClick: () => {
-			appStateModel.initOrder();
-		},
-	},
+// Успешное оформления заказа
+events.on('order:success', async (data: any) => {
+    try {
+        console.log('Order success data:', data);
+        
+        if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+            throw new Error('Корзина пуста. Невозможно оформить заказ.');
+        }
+
+        const itemIds = data.items.map((item: IProductItem) => {
+            if (!item.id) {
+                console.error('Item without ID:', item);
+                throw new Error('Товар без ID обнаружен в корзине');
+            }
+            return item.id;
+        });
+
+        console.log('Item IDs to send:', itemIds);
+
+        const order: IOrder = {
+            payment: data.orderData.paymentMethod,
+            email: data.contactsData.email,
+            phone: data.contactsData.phone,
+            address: data.orderData.address,
+            total: data.total,
+            items: itemIds
+        };
+
+        console.log('Sending order to server:', JSON.stringify(order, null, 2));
+
+        // Отправка заказа на сервер
+        const response = await api.createOrder(order);
+        console.log('Order created successfully:', response);
+        
+        basket.clear();
+        console.log('Basket cleared after successful order');
+
+        // Закрытие модалки контактов и показ успеха
+        contactsModal.close();
+        successModal.show(data.total);
+        
+    } catch (error) {
+        console.error('Failed to create order:', error);
+        alert('Произошла ошибка при оформлении заказа: ' + error);
+    }
 });
 
-eventEmitter.on(ModalViewEvents.OPEN, () => {
-	pageView.isLocked = true;
+// Полное завершение заказа
+events.on('order:complete', () => {
+    basket.clear();
+    successModal.close();
+    currentOrderData = {};
 });
 
-eventEmitter.on(ModalViewEvents.CLOSE, () => {
-	pageView.isLocked = false;
+// Загрузка и отображение карточек
+function initProducts() {
+    const gallery = document.querySelector('.gallery');
+    if (!gallery) {
+        console.error('Gallery element not found');
+        return;
+    }
+
+    api.getProducts()
+        .then(products => {
+            if (!Array.isArray(products)) {
+                console.error('Invalid API response format:', products);
+                return;
+            }
+            
+            products.forEach(product => {
+                const card = new Card(product, events);
+                gallery.appendChild(card.getElement());
+            });
+        })
+        .catch(error => {
+            console.error('Подробности ошибки:', {
+                message: error.message,
+                status: error.status,
+                url: API_URL + '/product'
+            });
+        });
+}
+
+// Инициализация модальных окон
+const modalElements = document.querySelectorAll('.modal');
+modalElements.forEach(modalElement => {
+    new Modal(modalElement as HTMLElement);
 });
 
+// Загрузка продуктов
+initProducts();
 
-eventEmitter.on<{
-	data: { items: IProduct[] };
-}>(
-	RegExp(
-		`${AppStateModelEvents.BASKET_UPDATE}|${AppStateModelEvents.BASKET_RESET}`
-	),
-	({ data }) => {
-		const { items } = data;
-
-		headerView.render({
-			counter: items.length,
-		});
-	}
-);
-
-
-eventEmitter.on<{
-	data: { items: IProduct[] };
-}>(
-	RegExp(
-		`${AppStateModelEvents.BASKET_UPDATE}|${AppStateModelEvents.BASKET_INIT}`
-	),
-	({ data }) => {
-		const { items } = data;
-
-		const basketTotalPrice = appStateModel.getBasketPrice();
-
-		const basketItemsViews = items.map<TViewNested<TBasketItemRenderArgs>>(
-			(item, index) => {
-				const basketItemView = new BasketItemView({
-					element: cloneTemplate('#card-basket'),
-					eventEmitter,
-					eventHandlers: {
-						onClick: () => {
-							appStateModel.removeBasketItem(item.id);
-						},
-					},
-				});
-
-				const basketItemViewRenderArgs: TBasketItemRenderArgs = {
-					...item,
-					index: index + 1,
-					price: formatPrice(item.price, settings.CURRENCY_TITLES),
-				};
-
-				return {
-					view: basketItemView,
-					renderArgs: basketItemViewRenderArgs,
-				};
-			}
-		);
-
-		modalView.render<TBasketRenderArgs<TBasketItemRenderArgs>>({
-			content: {
-				view: basketView,
-				renderArgs: {
-					isDisabled: items.length == 0,
-					price:
-						basketTotalPrice == 0
-							? ''
-							: formatPrice(basketTotalPrice, settings.CURRENCY_TITLES),
-					items: basketItemsViews,
-				},
-			},
-		});
-	}
-);
-
-eventEmitter.on<{ data: { item: IProduct } }>(
-	AppStateModelEvents.PREVIEW_UPDATE,
-	({ data }) => {
-		const { item } = data;
-
-		const isProductInBasket = appStateModel.getBasketIsContains(item.id);
-
-		const productPreviewView = new ProductPreviewView({
-			element: cloneTemplate('#card-preview'),
-			eventEmitter,
-			eventHandlers: {
-				onClick: () => {
-					if (isProductInBasket) {
-						appStateModel.removeBasketItem(item.id);
-					} else {
-						if (item.price) {
-							appStateModel.addBasketItem(item);
-						}
-					}
-				},
-			},
-		});
-
-		const productPreviewViewRenderArgs: TProductPreviewRenderArgs = {
-			...item,
-			color: getKeyByValueTranslation(
-				item.category.toLowerCase(),
-				settings.CATEGORY_COLORS_TITLES
-			),
-			isDisabled: !item.price,
-			price: formatPrice(item.price, settings.CURRENCY_TITLES),
-			buttonText: isProductInBasket ? 'Удалить из корзины' : 'Купить',
-		};
-
-		modalView.render<TProductPreviewRenderArgs>({
-			content: {
-				view: productPreviewView,
-				renderArgs: productPreviewViewRenderArgs,
-			},
-		});
-	}
-);
-
-
-eventEmitter.on<{ data: { items: IProduct[] } }>(
-	AppStateModelEvents.PRODUCTS_UPDATE,
-	({ data }) => {
-		const { items } = data;
-
-		const productsViews = items.map<TViewNested<TProductRenderArgs>>((item) => {
-			const productView = new ProductView({
-				element: cloneTemplate('#card-catalog'),
-				eventEmitter,
-				eventHandlers: {
-					onClick: () => {
-						appStateModel.setPreview(item);
-					},
-				},
-			});
-
-			const productsViewRenderArgs: TProductRenderArgs = {
-				...item,
-				color: getKeyByValueTranslation(
-					item.category.toLowerCase(),
-					settings.CATEGORY_COLORS_TITLES
-				),
-				price: formatPrice(item.price, settings.CURRENCY_TITLES),
-			};
-
-			return {
-				view: productView,
-				renderArgs: productsViewRenderArgs,
-			};
-		});
-
-		productsView.render<TProductRenderArgs>({
-			items: productsViews,
-		});
-	}
-);
-
-
-eventEmitter.on<{ data: { step: TOrderStep } }>(
-	AppStateModelEvents.ORDER_STEP,
-	({ data }) => {
-		const { step } = data;
-
-		
-		if (step === 'shipment') {
-			const orderShipmentView = new OrderShipmentView({
-				element: cloneTemplate('#order'),
-				eventEmitter,
-				eventHandlers: {
-					onSubmit: () => {
-						appStateModel.setStep('contacts');
-					},
-					onInput: ({ field, value }) => {
-						appStateModel.setOrderField(field as keyof IOrder, value);
-
-						orderShipmentView.render({
-							...appStateModel.getOrderInvoice(),
-							errors: appStateModel.getOrderErrors(),
-							isDisabled: !appStateModel.getOrderIsValid(),
-						});
-					},
-				},
-			});
-
-			modalView.render<TOrderShipmentRenderArgs>({
-				content: {
-					view: orderShipmentView,
-					renderArgs: {
-						...appStateModel.getOrderInvoice(),
-						errors: appStateModel.getOrderErrors(),
-						isDisabled: !appStateModel.getOrderIsValid(),
-					},
-				},
-			});
-		}
-
-		
-		if (step === 'contacts') {
-			const orderContactsView = new OrderContactsView({
-				element: cloneTemplate('#contacts'),
-				eventEmitter,
-				eventHandlers: {
-					onSubmit: () => {
-						
-						api
-							.createOrder(appStateModel.getOrderInvoice())
-							.then((data) => {
-								appStateModel.resetOrder();
-								appStateModel.resetBasket();
-
-								const orderSuccessView = new OrderSuccessView({
-									element: cloneTemplate('#success'),
-									eventEmitter,
-									eventHandlers: {
-										onClick: () => {
-											modalView.close();
-										},
-									},
-								});
-
-								modalView.render<TOrderSuccessRenderArgs>({
-									content: {
-										view: orderSuccessView,
-										renderArgs: {
-											description: `Списано ${formatPrice(
-												data.total,
-												settings.CURRENCY_TITLES
-											)}`,
-										},
-									},
-								});
-							})
-							.catch((error) => {
-								console.error(error);
-							});
-					},
-					onInput: ({ field, value }) => {
-						appStateModel.setOrderField(field as keyof IOrder, value);
-
-						orderContactsView.render({
-							...appStateModel.getOrderInvoice(),
-							errors: appStateModel.getOrderErrors(),
-							isDisabled: !appStateModel.getOrderIsValid(),
-						});
-					},
-				},
-			});
-
-			modalView.render<TOrderContactsRenderArgs>({
-				content: {
-					view: orderContactsView,
-					renderArgs: {
-						...appStateModel.getOrderInvoice(),
-						errors: appStateModel.getOrderErrors(),
-						isDisabled: !appStateModel.getOrderIsValid(),
-					},
-				},
-			});
-		}
-	}
-);
-
-
-api
-	.getProducts()
-	.then((products) => {
-		appStateModel.setProductsItems(products);
-	})
-	.catch((error) => {
-		console.error(error);
-	});
