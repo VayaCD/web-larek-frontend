@@ -63,24 +63,29 @@
 
     &_soft {
       background-color: $category1;
+      margin-right: 358px;
     }
     &_hard {
       background-color: $category5;
+      margin-right: 358px;
     }
     &_other {
       background-color: $category2;
+      margin-right: 378px;
     }
     &_additional {
       background-color: $category3;
+      margin-right: 288px;
     }
     &_button {
       background-color: $category4;
+      margin-right: 388px;
     }
   }
   &__action {
 
   }
   &__price {
-
+    
   }
 }
