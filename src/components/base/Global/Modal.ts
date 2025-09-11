@@ -1,6 +1,7 @@
 export class Modal {
     element: HTMLElement;
     private closeButton: HTMLElement;
+    private originalBodyStyle: string;
 
     constructor(element: HTMLElement) {
         this.element = element;
@@ -12,6 +13,7 @@ export class Modal {
 
         this.closeButton.addEventListener('click', () => this.close());
         this.setupOutsideClickHandler();
+        this.originalBodyStyle = '';
     }
 
     private setupOutsideClickHandler(): void {
@@ -22,11 +24,36 @@ export class Modal {
         });
     }
 
+    private disableBodyScroll(): void {
+        const scrollY = window.scrollY;
+        this.originalBodyStyle = document.body.style.cssText;
+        
+        document.body.style.cssText = `
+            position: fixed;
+            top: -${scrollY}px;
+            left: 0;
+            width: 100%;
+            overflow: hidden;
+        `;
+    }
+
+    private enableBodyScroll(): void {
+        document.body.style.cssText = this.originalBodyStyle;
+        
+        const scrollY = document.body.style.top;
+        if (scrollY) {
+            window.scrollTo(0, parseInt(scrollY || '0') * -1);
+        }
+    }
+
     close(): void {
         this.element.classList.remove('modal_active');
+        this.enableBodyScroll();
     }
 
     open(): void {
         this.element.classList.add('modal_active');
+        this.disableBodyScroll();
+        
     }
 }

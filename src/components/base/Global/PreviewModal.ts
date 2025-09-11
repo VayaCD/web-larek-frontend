@@ -20,7 +20,6 @@ export class PreviewModal extends Modal {
     }
 
     private setupBasketListeners(): void {
-        // Следим за обновлениями корзины
         this.eventEmitter.on('basket:update', (data: { items: IProductItem[]; total: number }) => {
             if (this.currentProduct) {
                 this.updateButtonState(this.currentProduct.id);
@@ -30,7 +29,6 @@ export class PreviewModal extends Modal {
         // Обработчик для проверки наличия товара в корзине
         this.eventEmitter.on('basket:check-product', 
             (data: { productId: string; callback: (inBasket: boolean) => void }) => {
-            // Эмитируем событие для запроса состояния корзины
             this.eventEmitter.emit('basket:get-state', {
                 callback: (items: IProductItem[]) => {
                     const inBasket = items.some(item => item.id === data.productId);
@@ -50,6 +48,7 @@ export class PreviewModal extends Modal {
         const description = content.querySelector('.card__text');
         const image = content.querySelector('.card__image');
         const price = content.querySelector('.card__price');
+        const button = content.querySelector('.card__button') as HTMLButtonElement;
 
         if (title) {
             title.textContent = product.title;
@@ -60,7 +59,7 @@ export class PreviewModal extends Modal {
         }
 
         if (price) {
-            price.textContent = `${product.price} синапсов`;
+            price.textContent = product.price ? `${product.price} синапсов` : 'Бесценно';
         }
 
         if (image) {
@@ -78,6 +77,16 @@ export class PreviewModal extends Modal {
             }
         }
 
+        if (button) {
+            if (!product.price) {
+                button.textContent = 'Недоступно';
+                button.disabled = true;
+                button.classList.add('button_disabled');
+            } else {
+                this.updateButtonState(product.id);
+            }
+        }
+
         const modalContent = this.element.querySelector('.modal__content');
         if (modalContent) {
             modalContent.innerHTML = '';
@@ -86,7 +95,9 @@ export class PreviewModal extends Modal {
 
         this.updateButtonState(product.id);
         this.open();
-        this.setupButtonListeners(content);
+        if (product.price) {
+            this.setupButtonListeners(content);
+        }
     }
 
     private updateButtonState(productId: string): void {

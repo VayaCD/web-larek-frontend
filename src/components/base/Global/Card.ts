@@ -43,7 +43,9 @@ if (category) {
         category.classList.add('card__category_button');
     }
 }
-		if (price) price.textContent = `${this.product.price} синапсов`;
+        if (price) {
+            price.textContent = this.product.price ? `${this.product.price} синапсов` : 'Бесценно';
+        }
 		if (image) {
 			(
 				image as HTMLImageElement
