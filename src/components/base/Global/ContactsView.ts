@@ -1,4 +1,3 @@
-import { Modal } from './Modal';
 import { EventEmitter } from '../Base/events';
 import { IProductItem } from '../../../types';
 
@@ -7,44 +6,34 @@ interface ContactsData {
     phone: string;
 }
 
-export class ContactsModal extends Modal {
+export class ContactsView {
     private contactsData: ContactsData = {
         email: '',
         phone: ''
     };
 
     constructor(
-        element: HTMLElement, 
         private eventEmitter: EventEmitter, 
         private orderData: any,
         private basketItems: IProductItem[], 
         private totalPrice: number
-    ) {
-        super(element);
-    }
+    ) {}
 
-    public show(): void {
-        this.render();
-        this.open();
-        this.setupEventListeners();
-    }
-
-    private render(): void {
+    public render(): HTMLElement {
         const template = document.querySelector('#contacts') as HTMLTemplateElement;
         const content = template.content.cloneNode(true) as DocumentFragment;
+        const element = content.firstElementChild as HTMLElement;
 
-        const modalContent = this.element.querySelector('.modal__content');
-        if (modalContent) {
-            modalContent.innerHTML = '';
-            modalContent.appendChild(content);
-        }
+        this.setupEventListeners(element);
+        return element;
     }
 
-    private setupEventListeners(): void {
-        const emailInput = this.element.querySelector('input[name="email"]') as HTMLInputElement;
-        const phoneInput = this.element.querySelector('input[name="phone"]') as HTMLInputElement;
-        const payButton = this.element.querySelector('.button') as HTMLButtonElement;
-        const errorsContainer = this.element.querySelector('.form__errors') as HTMLElement;
+    private setupEventListeners(element: HTMLElement): void {
+        const inputs = element.querySelectorAll('input[type="text"]');
+        const emailInput = inputs[0] as HTMLInputElement;
+        const phoneInput = inputs[1] as HTMLInputElement;
+        const payButton = element.querySelector('.button') as HTMLButtonElement;
+        const errorsContainer = element.querySelector('.form__errors') as HTMLElement;
 
         if (emailInput) {
             emailInput.addEventListener('input', () => {
@@ -109,16 +98,12 @@ export class ContactsModal extends Modal {
     private completeOrder(): void {
         console.log('Complete order with:', {
             orderData: this.orderData,
-            contactsData: this.contactsData,
-            items: this.basketItems,
-            total: this.totalPrice
+            contactsData: this.contactsData
         });
         
-        this.eventEmitter.emit('order:success', {
+        this.eventEmitter.emit('order:submit', {
             orderData: this.orderData,
-            contactsData: this.contactsData,
-            items: this.basketItems,
-            total: this.totalPrice
+            contactsData: this.contactsData
         });
     }
 }

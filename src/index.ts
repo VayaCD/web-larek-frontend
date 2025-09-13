@@ -1,90 +1,126 @@
 import './scss/styles.scss';
 import { Modal } from './components/base/Global/Modal';
 import { ProductsApi, IOrder } from './components/base/Global/Api';
-import { Card } from './components/base/Global/Card';
 import { EventEmitter } from './components/base/Base/events';
-import { PreviewModal } from './components/base/Global/PreviewModal';
+import { PreviewView } from './components/base/Global/PreviewView';
 import { IProductItem } from './types';
-import { BasketModal } from './components/base/Global/BasketModal';
+import { BasketView } from './components/base/Global/BasketView';
 import { Basket } from './components/base/Global/Basket';
-import { OrderModal } from './components/base/Global/OrderModal';
-import { ContactsModal } from './components/base/Global/ContactsModal';
-import { SuccessModal } from './components/base/Global/SuccessModal';
+import { OrderView } from './components/base/Global/OrderView';
+import { ContactsView } from './components/base/Global/ContactsView';
+import { SuccessView } from './components/base/Global/SuccessView';
+import { BasketItem } from './components/base/Global/BasketItem';
+import { HeaderView } from './components/base/Global/HeaderView';
+import { GalleryView } from './components/base/Global/GalleryView';
 
-
-// Инициализация API
 const API_URL = `${process.env.API_ORIGIN}/api/weblarek`;
 const events = new EventEmitter();
 const api = new ProductsApi(API_URL);
+const basket = new Basket();
+const modal = new Modal(document.querySelector('#modal-container') as HTMLElement);
 
-// Инициализация корзины
-const basket = new Basket(events);
+const previewView = new PreviewView(events);
+const basketView = new BasketView(events);
+const successView = new SuccessView(events);
+const galleryView = new GalleryView(events);
+new HeaderView(events);
 
-// Инициализация модальных окон
-const previewModal = new PreviewModal(document.querySelector('#modal-container') as HTMLElement, events);
-const basketModal = new BasketModal(document.querySelector('#basket-modal') as HTMLElement, events);
-const orderModal = new OrderModal(document.querySelector('#order-modal') as HTMLElement, events, [], 0);
-const contactsModal = new ContactsModal(document.querySelector('#contacts-modal') as HTMLElement, events, {}, [], 0);
-const successModal = new SuccessModal(document.querySelector('#success-modal') as HTMLElement, events);
-let currentOrderData: any = {};
-let currentBasketItems: IProductItem[] = [];
-let currentTotalPrice: number = 0;
+events.on('basket:change', () => {
+    const items = basket.getItems();
+    const total = basket.getTotalPrice();
+    
+    events.emit('basket:update', { items, total });
+});
+events.on('basket:request-list-update', () => {
+    const basketItems = basket.getItems();
+    const itemElements = basketItems.map((item, index) => {
+        const basketItem = new BasketItem(item, index, (productId: string) => {
+            events.emit('basket:remove', { productId });
+        });
+        return basketItem.getElement();
+    });
+    
+    events.emit('basket:set-list', itemElements);
+});
 
 events.on('card:click', (data: { data: IProductItem }) => {
-    previewModal.show(data.data);
+    const content = previewView.render(data.data);
+    modal.setContent(content);
+    modal.open();
 });
-// Обработка добавления в корзину из модалки предпросмотра
-events.on('product:add-to-basket', (data: { product: IProductItem }) => {
+
+events.on('basket:add', (data: { product: IProductItem }) => {
     basket.addItem(data.product);
+    updateBasketState();
+});
+
+events.on('basket:remove', (data: { productId: string }) => {
+    basket.removeItem(data.productId);
+    updateBasketState();
+});
+
+events.on('basket:clear', () => {
+    basket.clear();
+    updateBasketState();
+});
+
+
+function updateBasketState(): void {
+    events.emit('basket:update', { 
+        items: basket.getItems(), 
+        total: basket.getTotalPrice() 
+    });
+}
+
+events.on('product:add-to-basket', (data: { product: IProductItem }) => {
+    events.emit('basket:add', { product: data.product });
 });
 
 events.on('basket:get-state', (data: { callback: (items: IProductItem[]) => void }) => {
     data.callback(basket.getItems());
 });
 
-// Обработка клика по кнопке корзины в шапке
-const basketButton = document.querySelector('.header__basket');
-if (basketButton) {
-    basketButton.addEventListener('click', () => {
-        basketModal.show();
-    });
-}
-
-// Оформление заказа из корзины
+events.on('header:basket-click', () => {
+    const content = basketView.render();
+    modal.setContent(content);
+    modal.open();
+});
 events.on('basket:checkout', (data: { items: IProductItem[], total: number }) => {
-    currentBasketItems = data.items;
-    currentTotalPrice = data.total;
-    console.log('Basket checkout:', { items: currentBasketItems, total: currentTotalPrice });
-    basketModal.close();
-    orderModal.show();
-});
-
-// Завершение первого шага заказа
-events.on('order:step1-complete', (orderData: any) => {
-    currentOrderData = { ...orderData };
-    console.log('Order step1 complete:', currentOrderData);
-    orderModal.close();
+    console.log('Basket checkout:', { items: data.items, total: data.total });
+    modal.close();
     
-    const contactsModal = new ContactsModal(
-        document.querySelector('#contacts-modal') as HTMLElement,
-        events,
-        currentOrderData,
-        currentBasketItems, 
-        currentTotalPrice  
-    );
-    contactsModal.show();
+    const orderView = new OrderView(events, data.items, data.total);
+    const content = orderView.render();
+    modal.setContent(content);
+    modal.open();
 });
 
-// Успешное оформления заказа
-events.on('order:success', async (data: any) => {
+events.on('order:step1-complete', (orderData: any) => {
+    console.log('Order step1 complete:', orderData);
+    modal.close();
+    
+    const contactsView = new ContactsView(
+        events,
+        orderData,
+        [], 
+        0   
+    );
+    const content = contactsView.render();
+    modal.setContent(content);
+    modal.open();
+});
+events.on('order:submit', async (data: any) => {
     try {
-        console.log('Order success data:', data);
+        console.log('Order submit data:', data);
         
-        if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+        const basketItems = basket.getItems();
+        const totalPrice = basket.getTotalPrice();
+        
+        if (!basketItems || !Array.isArray(basketItems) || basketItems.length === 0) {
             throw new Error('Корзина пуста. Невозможно оформить заказ.');
         }
 
-        const itemIds = data.items.map((item: IProductItem) => {
+        const itemIds = basketItems.map((item: IProductItem) => {
             if (!item.id) {
                 console.error('Item without ID:', item);
                 throw new Error('Товар без ID обнаружен в корзине');
@@ -99,22 +135,23 @@ events.on('order:success', async (data: any) => {
             email: data.contactsData.email,
             phone: data.contactsData.phone,
             address: data.orderData.address,
-            total: data.total,
+            total: totalPrice,
             items: itemIds
         };
 
         console.log('Sending order to server:', JSON.stringify(order, null, 2));
 
-        // Отправка заказа на сервер
         const response = await api.createOrder(order);
         console.log('Order created successfully:', response);
         
         basket.clear();
+        updateBasketState();
         console.log('Basket cleared after successful order');
 
-        // Закрытие модалки контактов и показ успеха
-        contactsModal.close();
-        successModal.show(data.total);
+        modal.close();
+        const content = successView.render(totalPrice);
+        modal.setContent(content);
+        modal.open();
         
     } catch (error) {
         console.error('Failed to create order:', error);
@@ -122,32 +159,20 @@ events.on('order:success', async (data: any) => {
     }
 });
 
-// Полное завершение заказа
 events.on('order:complete', () => {
     basket.clear();
-    successModal.close();
-    currentOrderData = {};
+    updateBasketState();
+    modal.close();
 });
 
-// Загрузка и отображение карточек
-function initProducts() {
-    const gallery = document.querySelector('.gallery');
-    if (!gallery) {
-        console.error('Gallery element not found');
-        return;
-    }
+events.on('modal:close', () => {
+    modal.close();
+});
 
+function initProducts() {
     api.getProducts()
         .then(products => {
-            if (!Array.isArray(products)) {
-                console.error('Invalid API response format:', products);
-                return;
-            }
-            
-            products.forEach(product => {
-                const card = new Card(product, events);
-                gallery.appendChild(card.getElement());
-            });
+            galleryView.renderProducts(products);
         })
         .catch(error => {
             console.error('Подробности ошибки:', {
@@ -158,12 +183,10 @@ function initProducts() {
         });
 }
 
-// Инициализация модальных окон
-const modalElements = document.querySelectorAll('.modal');
-modalElements.forEach(modalElement => {
-    new Modal(modalElement as HTMLElement);
+events.emit('basket:update', { 
+    items: basket.getItems(), 
+    total: basket.getTotalPrice() 
 });
 
-// Загрузка продуктов
 initProducts();
 

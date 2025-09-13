@@ -1,4 +1,3 @@
-import { Modal } from './Modal';
 import { EventEmitter } from '../Base/events';
 import { IProductItem } from '../../../types';
 
@@ -7,61 +6,45 @@ interface OrderData {
     address: string;
 }
 
-export class OrderModal extends Modal {
+export class OrderView {
     private orderData: OrderData = {
         paymentMethod: null,
         address: ''
     };
 
     constructor(
-        element: HTMLElement, 
         private eventEmitter: EventEmitter, 
         private basketItems: IProductItem[], 
         private totalPrice: number
-    ) {
-        super(element);
-    }
+    ) {}
 
-    public show(): void {
-        this.render();
-        this.open();
-        this.setupEventListeners();
-    }
-
-    private render(): void {
+    public render(): HTMLElement {
         const template = document.querySelector('#order') as HTMLTemplateElement;
         const content = template.content.cloneNode(true) as DocumentFragment;
+        const element = content.firstElementChild as HTMLElement;
 
-        const modalContent = this.element.querySelector('.modal__content');
-        if (modalContent) {
-            modalContent.innerHTML = '';
-            modalContent.appendChild(content);
-        }
+        this.setupEventListeners(element);
+        return element;
     }
 
-    private setupEventListeners(): void {
-        const paymentButtons = this.element.querySelectorAll('.order__buttons button');
-        const addressInput = this.element.querySelector('input[name="address"]') as HTMLInputElement;
-        const nextButton = this.element.querySelector('.order__button') as HTMLButtonElement;
-        const errorsContainer = this.element.querySelector('.form__errors') as HTMLElement;
+    private setupEventListeners(element: HTMLElement): void {
+        const paymentButtons = element.querySelectorAll('.order__buttons button');
+        const addressInput = element.querySelector('input[name="address"]') as HTMLInputElement;
+        const nextButton = element.querySelector('.order__button') as HTMLButtonElement;
+        const errorsContainer = element.querySelector('.form__errors') as HTMLElement;
 
-paymentButtons.forEach(button => {
+        paymentButtons.forEach(button => {
             button.addEventListener('click', () => {
                 paymentButtons.forEach(btn => btn.classList.remove('button_alt-active'));
                 button.classList.add('button_alt-active');
                 
                 const paymentMethod = button.getAttribute('name');
-                console.log('Selected payment method:', paymentMethod);
                 
                 if (paymentMethod === 'card') {
                     this.orderData.paymentMethod = 'online';
                 } else if (paymentMethod === 'cash') {
                     this.orderData.paymentMethod = 'cash';
-                } else {
-                    console.error('Invalid payment method:', paymentMethod);
                 }
-                
-                console.log('Payment method set to:', this.orderData.paymentMethod);
                 this.validateForm(nextButton, errorsContainer);
             });
         });

@@ -1,8 +1,7 @@
-import { Modal } from './Modal';
 import { IProductItem } from '../../../types';
 import { EventEmitter } from '../Base/events';
 
-export class PreviewModal extends Modal {
+export class PreviewView {
     private static readonly CATEGORY_CLASSES = {
         'другое': 'card__category_other',
         'софт-скил': 'card__category_soft',
@@ -13,9 +12,9 @@ export class PreviewModal extends Modal {
 
     private currentProduct: IProductItem | null = null;
     private isInBasket: boolean = false;
+    private currentElement: HTMLElement | null = null;
 
-    constructor(element: HTMLElement, private eventEmitter: EventEmitter) {
-        super(element);
+    constructor(private eventEmitter: EventEmitter) {
         this.setupBasketListeners();
     }
 
@@ -38,10 +37,11 @@ export class PreviewModal extends Modal {
         });
     }
 
-    public show(product: IProductItem): void {
+    public render(product: IProductItem): HTMLElement {
         this.currentProduct = product;
         const template = document.querySelector('#card-preview') as HTMLTemplateElement;
         const content = template.content.querySelector('.card').cloneNode(true) as HTMLElement;
+        this.currentElement = content;
         
         const title = content.querySelector('.card__title');
         const category = content.querySelector('.card__category');
@@ -68,10 +68,10 @@ export class PreviewModal extends Modal {
 
         if (category) {
             category.textContent = product.category;
-            Object.values(PreviewModal.CATEGORY_CLASSES).forEach(cls => {
+            Object.values(PreviewView.CATEGORY_CLASSES).forEach(cls => {
                 category.classList.remove(cls);
             });
-            const categoryClass = PreviewModal.CATEGORY_CLASSES[product.category.toLowerCase() as keyof typeof PreviewModal.CATEGORY_CLASSES];
+            const categoryClass = PreviewView.CATEGORY_CLASSES[product.category.toLowerCase() as keyof typeof PreviewView.CATEGORY_CLASSES];
             if (categoryClass) {
                 category.classList.add(categoryClass);
             }
@@ -87,17 +87,12 @@ export class PreviewModal extends Modal {
             }
         }
 
-        const modalContent = this.element.querySelector('.modal__content');
-        if (modalContent) {
-            modalContent.innerHTML = '';
-            modalContent.appendChild(content);
-        }
-
         this.updateButtonState(product.id);
-        this.open();
         if (product.price) {
             this.setupButtonListeners(content);
         }
+
+        return content;
     }
 
     private updateButtonState(productId: string): void {
@@ -111,9 +106,9 @@ export class PreviewModal extends Modal {
     }
 
     private renderButton(): void {
-        if (!this.currentProduct) return;
+        if (!this.currentProduct || !this.currentElement) return;
         
-        const button = this.element.querySelector('.card__button');
+        const button = this.currentElement.querySelector('.card__button');
         if (!button) return;
 
         if (this.isInBasket) {
@@ -144,7 +139,8 @@ export class PreviewModal extends Modal {
                 });
             }
             
-            this.close();
+            // Закрываем модальное окно после действия
+            this.eventEmitter.emit('modal:close');
         });
     }
 }
