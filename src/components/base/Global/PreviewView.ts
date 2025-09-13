@@ -25,7 +25,6 @@ export class PreviewView {
             }
         });
 
-        // Обработчик для проверки наличия товара в корзине
         this.eventEmitter.on('basket:check-product', 
             (data: { productId: string; callback: (inBasket: boolean) => void }) => {
             this.eventEmitter.emit('basket:get-state', {
@@ -112,7 +111,7 @@ export class PreviewView {
         if (!button) return;
 
         if (this.isInBasket) {
-            button.textContent = 'Удалить из корзины';
+            button.textContent = 'Удалить из корзиныы';
             button.classList.add('button_remove');
             button.classList.remove('button_add');
         } else {
@@ -139,7 +138,6 @@ export class PreviewView {
                 });
             }
             
-            // Закрываем модальное окно после действия
             this.eventEmitter.emit('modal:close');
         });
     }

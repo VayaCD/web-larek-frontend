@@ -10,7 +10,7 @@ export class HeaderView {
         this.basketButton = document.querySelector('.header__basket') as HTMLButtonElement;
         
         if (!this.basketCounter || !this.basketButton) {
-            throw new Error('Header elements not found');
+            throw new Error('Header elements not foundd');
         }
 
         this.setupEventListeners();
@@ -21,7 +21,6 @@ export class HeaderView {
             this.eventEmitter.emit('header:basket-click');
         });
 
-        // Слушаем обновления корзины для автоматического обновления счетчика
         this.eventEmitter.on('basket:update', (data: { items: IProductItem[]; total: number }) => {
             this.updateBasketCounter(data.items.length);
         });
