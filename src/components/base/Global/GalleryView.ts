@@ -1,11 +1,7 @@
-import { Card } from './Card';
-import { IProductItem } from '../../../types';
-import { EventEmitter } from '../Base/events';
-
 export class GalleryView {
     private gallery: HTMLElement;
 
-    constructor(private eventEmitter: EventEmitter) {
+    constructor() {
         this.gallery = document.querySelector('.gallery') as HTMLElement;
         
         if (!this.gallery) {
@@ -13,17 +9,16 @@ export class GalleryView {
         }
     }
 
-    public renderProducts(products: IProductItem[]): void {
-        if (!Array.isArray(products)) {
-            console.error('Invalid API response format:', products);
+    public renderCards(cards: HTMLElement[]): void {
+        if (!Array.isArray(cards)) {
+            console.error('Invalid cards format:', cards);
             return;
         }
         
         this.gallery.innerHTML = '';
         
-        products.forEach(product => {
-            const card = new Card(product, this.eventEmitter);
-            this.gallery.appendChild(card.getElement());
+        cards.forEach(card => {
+            this.gallery.appendChild(card);
         });
     }
 }

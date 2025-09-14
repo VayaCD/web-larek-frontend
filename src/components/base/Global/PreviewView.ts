@@ -10,131 +10,88 @@ export class PreviewView {
         'кнопка': 'card__category_button'
     } as const;
 
-    private currentProduct: IProductItem | null = null;
-    private isInBasket: boolean = false;
-    private currentElement: HTMLElement | null = null;
+    private template: HTMLTemplateElement;
+    private container: HTMLElement;
+    private title: HTMLElement;
+    private category: HTMLElement;
+    private description: HTMLElement;
+    private image: HTMLImageElement;
+    private price: HTMLElement;
+    private button: HTMLButtonElement;
 
     constructor(private eventEmitter: EventEmitter) {
-        this.setupBasketListeners();
-    }
-
-    private setupBasketListeners(): void {
-        this.eventEmitter.on('basket:update', (data: { items: IProductItem[]; total: number }) => {
-            if (this.currentProduct) {
-                this.updateButtonState(this.currentProduct.id);
-            }
-        });
-
-        this.eventEmitter.on('basket:check-product', 
-            (data: { productId: string; callback: (inBasket: boolean) => void }) => {
-            this.eventEmitter.emit('basket:get-state', {
-                callback: (items: IProductItem[]) => {
-                    const inBasket = items.some(item => item.id === data.productId);
-                    data.callback(inBasket);
-                }
-            });
-        });
-    }
-
-    public render(product: IProductItem): HTMLElement {
-        this.currentProduct = product;
-        const template = document.querySelector('#card-preview') as HTMLTemplateElement;
-        const content = template.content.querySelector('.card').cloneNode(true) as HTMLElement;
-        this.currentElement = content;
+        this.template = document.querySelector('#card-preview') as HTMLTemplateElement;
         
-        const title = content.querySelector('.card__title');
-        const category = content.querySelector('.card__category');
-        const description = content.querySelector('.card__text');
-        const image = content.querySelector('.card__image');
-        const price = content.querySelector('.card__price');
-        const button = content.querySelector('.card__button') as HTMLButtonElement;
-
-        if (title) {
-            title.textContent = product.title;
-        }
-
-        if (description) {
-            description.textContent = product.description;
-        }
-
-        if (price) {
-            price.textContent = product.price ? `${product.price} синапсов` : 'Бесценно';
-        }
-
-        if (image) {
-            (image as HTMLImageElement).src = `https://larek-api.nomoreparties.co/content/weblarek${product.image}`;
-        }
-
-        if (category) {
-            category.textContent = product.category;
-            Object.values(PreviewView.CATEGORY_CLASSES).forEach(cls => {
-                category.classList.remove(cls);
-            });
-            const categoryClass = PreviewView.CATEGORY_CLASSES[product.category.toLowerCase() as keyof typeof PreviewView.CATEGORY_CLASSES];
-            if (categoryClass) {
-                category.classList.add(categoryClass);
-            }
-        }
-
-        if (button) {
-            if (!product.price) {
-                button.textContent = 'Недоступно';
-                button.disabled = true;
-                button.classList.add('button_disabled');
-            } else {
-                this.updateButtonState(product.id);
-            }
-        }
-
-        this.updateButtonState(product.id);
-        if (product.price) {
-            this.setupButtonListeners(content);
-        }
-
-        return content;
-    }
-
-    private updateButtonState(productId: string): void {
-        this.eventEmitter.emit('basket:check-product', { 
-            productId,
-            callback: (inBasket: boolean) => {
-                this.isInBasket = inBasket;
-                this.renderButton();
-            }
-        });
-    }
-
-    private renderButton(): void {
-        if (!this.currentProduct || !this.currentElement) return;
+        this.container = this.template.content.querySelector('.card').cloneNode(true) as HTMLElement;
         
-        const button = this.currentElement.querySelector('.card__button');
-        if (!button) return;
+        this.title = this.container.querySelector('.card__title') as HTMLElement;
+        this.category = this.container.querySelector('.card__category') as HTMLElement;
+        this.description = this.container.querySelector('.card__text') as HTMLElement;
+        this.image = this.container.querySelector('.card__image') as HTMLImageElement;
+        this.price = this.container.querySelector('.card__price') as HTMLElement;
+        this.button = this.container.querySelector('.card__button') as HTMLButtonElement;
+        
+        this.setupEventListeners();
+    }
 
-        if (this.isInBasket) {
-            button.textContent = 'Удалить из корзиныы';
-            button.classList.add('button_remove');
-            button.classList.remove('button_add');
+    public render(): HTMLElement {
+        return this.container;
+    }
+
+    public setContent(product: IProductItem): void {
+        this.title.textContent = product.title;
+        this.title.setAttribute('data-product-id', product.id);
+        this.description.textContent = product.description;
+        this.price.textContent = product.price ? `${product.price} синапсов` : 'Бесценно';
+        this.image.src = `https://larek-api.nomoreparties.co/content/weblarek${product.image}`;
+        
+        this.category.textContent = product.category;
+        Object.values(PreviewView.CATEGORY_CLASSES).forEach(cls => {
+            this.category.classList.remove(cls);
+        });
+        const categoryClass = PreviewView.CATEGORY_CLASSES[product.category.toLowerCase() as keyof typeof PreviewView.CATEGORY_CLASSES];
+        if (categoryClass) {
+            this.category.classList.add(categoryClass);
+        }
+
+        if (!product.price) {
+            this.button.textContent = 'Недоступно';
+            this.button.disabled = true;
+            this.button.classList.add('button_disabled');
         } else {
-            button.textContent = 'В корзину';
-            button.classList.add('button_add');
-            button.classList.remove('button_remove');
+            this.button.disabled = false;
+            this.button.classList.remove('button_disabled');
         }
     }
 
-    private setupButtonListeners(content: HTMLElement): void {
-        const button = content.querySelector('.card__button');
-        if (!button || !this.currentProduct) return;
+    public setButtonState(isInBasket: boolean): void {
+        if (isInBasket) {
+            this.button.textContent = 'Удалить из корзины';
+            this.button.classList.add('button_remove');
+            this.button.classList.remove('button_add');
+        } else {
+            this.button.textContent = 'В корзину';
+            this.button.classList.add('button_add');
+            this.button.classList.remove('button_remove');
+        }
+    }
 
-        button.addEventListener('click', (event) => {
+    private setupEventListeners(): void {
+        this.button.addEventListener('click', (event) => {
             event.stopPropagation();
             
-            if (this.isInBasket) {
+            const productId = this.title.getAttribute('data-product-id');
+            const isInBasket = this.button.classList.contains('button_remove');
+            
+            if (!productId) return;
+            
+            if (isInBasket) {
                 this.eventEmitter.emit('basket:remove', { 
-                    productId: this.currentProduct.id 
+                    productId: productId 
                 });
             } else {
                 this.eventEmitter.emit('product:add-to-basket', { 
-                    product: this.currentProduct 
+                    productId: productId 
                 });
             }
             

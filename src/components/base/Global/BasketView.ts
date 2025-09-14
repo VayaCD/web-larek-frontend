@@ -3,9 +3,8 @@ import { EventEmitter } from '../Base/events';
 import { ensureElement, cloneTemplate } from '../../../utils/utils';
 
 export class BasketView {
-    private basketItems: IProductItem[] = [];
-    private totalPrice: number = 0;
     private basketTemplate: HTMLTemplateElement;
+    private container: HTMLElement;
     private listElement: HTMLElement;
     private totalElement: HTMLElement;
     private checkoutButton: HTMLButtonElement;
@@ -13,46 +12,29 @@ export class BasketView {
     constructor(private eventEmitter: EventEmitter) {
         this.basketTemplate = ensureElement<HTMLTemplateElement>('#basket');
         
-        this.init();
-    }
-
-    private init(): void {
-        this.eventEmitter.on('basket:update', (data: { items: IProductItem[]; total: number }) => {
-            this.basketItems = data.items;
-            this.totalPrice = data.total;
-            
-            if (this.listElement) {
-                this.updateList();
-            }
-        });
-
-        this.eventEmitter.on('basket:set-list', (items: HTMLElement[]) => {
-            this.setList(items);
-        });
+        this.container = cloneTemplate<HTMLElement>(this.basketTemplate);
+        
+        this.listElement = ensureElement<HTMLElement>('.basket__list', this.container);
+        this.totalElement = ensureElement<HTMLElement>('.basket__price', this.container);
+        this.checkoutButton = ensureElement<HTMLButtonElement>('.basket__button', this.container);
+        
+        this.setupEventListeners();
     }
 
     public render(): HTMLElement {
-        const content = cloneTemplate<HTMLElement>(this.basketTemplate);
-        
-        this.listElement = ensureElement<HTMLElement>('.basket__list', content);
-        this.totalElement = ensureElement<HTMLElement>('.basket__price', content);
-        this.checkoutButton = ensureElement<HTMLButtonElement>('.basket__button', content);
-
-        this.updateContent();
-        this.setupEventListeners(content);
-        
-        this.eventEmitter.emit('basket:request-list-update');
-
-        return content;
+        return this.container;
     }
 
-    private updateContent(): void {
-        if (this.totalElement) {
-            this.totalElement.textContent = `${this.totalPrice} синапсов`;
+    private updateContent(totalPrice?: number): void {
+        if (totalPrice !== undefined && this.totalElement) {
+            this.totalElement.textContent = `${totalPrice} синапсов`;
         }
-        
+    }
+
+    private updateButtonState(): void {
         if (this.checkoutButton) {
-            this.checkoutButton.disabled = this.basketItems.length === 0;
+            const hasItems = this.listElement.children.length > 0;
+            this.checkoutButton.disabled = !hasItems;
             
             if (this.checkoutButton.disabled) {
                 this.checkoutButton.classList.add('button_disabled');
@@ -62,26 +44,17 @@ export class BasketView {
         }
     }
 
-    private updateList(): void {
-        this.eventEmitter.emit('basket:request-list-update');
-        this.updateContent();
-    }
-
-    public setList(items: HTMLElement[]): void {
+    public setList(items: HTMLElement[], totalPrice?: number): void {
         if (this.listElement) {
             this.listElement.replaceChildren(...items);
+            this.updateContent(totalPrice);
+            this.updateButtonState();
         }
     }
 
-    private setupEventListeners(content: HTMLElement): void {
-        const checkoutButton = content.querySelector('.basket__button') as HTMLButtonElement;
-        if (checkoutButton) {
-            checkoutButton.addEventListener('click', () => {
-                this.eventEmitter.emit('basket:checkout', {
-                    items: this.basketItems,
-                    total: this.totalPrice,
-                });
-            });
-        }
+    private setupEventListeners(): void {
+        this.checkoutButton.addEventListener('click', () => {
+            this.eventEmitter.emit('basket:checkout');
+        });
     }
 }

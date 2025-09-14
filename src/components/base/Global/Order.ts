@@ -1,6 +1,5 @@
-import { IProductItem } from '../../../types';
 import { EventEmitter } from '../Base/events';
-import { ProductsApi, IOrder as IOrderData } from './Api';
+import { IOrder as IOrderData } from './Api';
 
 export interface IOrderFormData {
     payment: 'online' | 'cash';
@@ -13,8 +12,6 @@ export interface IOrderContacts {
 }
 
 export interface IOrderState {
-    items: IProductItem[];
-    total: number;
     formData?: IOrderFormData;
     contacts?: IOrderContacts;
     orderId?: string;
@@ -22,76 +19,101 @@ export interface IOrderState {
 
 export class Order {
     private state: IOrderState;
-    private api: ProductsApi;
     private events: EventEmitter;
 
-    constructor(api: ProductsApi, events: EventEmitter) {
-        this.api = api;
+    constructor(events: EventEmitter) {
         this.events = events;
-        this.state = {
-            items: [],
-            total: 0
-        };
-    }
-
-    initOrder(items: IProductItem[], total: number): void {
-        this.state = {
-            items: [...items],
-            total: total
-        };
-        this.events.emit('order:initialized', { order: this.state });
+        this.state = {};
     }
 
     updateFormData(formData: IOrderFormData): void {
         this.state.formData = formData;
+        this.validateFormData();
         this.events.emit('order:form-updated', { formData });
     }
 
     updateContacts(contacts: IOrderContacts): void {
         this.state.contacts = contacts;
+        this.validateContacts();
         this.events.emit('order:contacts-updated', { contacts });
     }
 
-    async submitOrder(): Promise<string> {
+    private validateFormData(): void {
+        const errors: { [key: string]: string } = {};
+        
+        if (!this.state.formData?.payment) {
+            errors.payment = 'Выберите способ оплаты';
+        }
+        
+        if (!this.state.formData?.address?.trim()) {
+            errors.address = 'Введите адрес доставки';
+        }
+        
+        this.events.emit('order:validate', { errors });
+    }
+
+    private validateContacts(): void {
+        const errors: { [key: string]: string } = {};
+        
+        if (!this.state.contacts?.email?.trim()) {
+            errors.email = 'Введите email';
+        } else if (!this.isValidEmail(this.state.contacts.email)) {
+            errors.email = 'Введите корректный email';
+        }
+        
+        if (!this.state.contacts?.phone?.trim()) {
+            errors.phone = 'Введите телефон';
+        } else if (!this.isValidPhone(this.state.contacts.phone)) {
+            errors.phone = 'Введите корректный телефон';
+        }
+        
+        this.events.emit('contacts:validate', { errors });
+    }
+
+    private isValidEmail(email: string): boolean {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+
+    private isValidPhone(phone: string): boolean {
+        const phoneRegex = /^\+?[78][-\(]?\d{3}\)?-?\d{3}-?\d{2}-?\d{2}$/;
+        return phoneRegex.test(phone);
+    }
+
+    getOrderData(basketItems: string[], total: number): IOrderData {
         if (!this.state.formData || !this.state.contacts) {
             throw new Error('Не все данные заказа заполнены');
         }
 
-        if (this.state.items.length === 0) {
+        if (basketItems.length === 0) {
             throw new Error('Корзина пуста');
         }
 
-        const orderData: IOrderData = {
+        return {
             payment: this.state.formData.payment,
             address: this.state.formData.address,
             email: this.state.contacts.email,
             phone: this.state.contacts.phone,
-            total: this.state.total,
-            items: this.state.items.map(item => item.id)
+            total: total,
+            items: basketItems
         };
+    }
 
-        try {
-            const response = await this.api.createOrder(orderData);
-            this.state.orderId = response.id;
-            this.events.emit('order:submitted', { orderId: response.id, order: this.state });
-            return response.id;
-        } catch (error) {
-            console.error('Ошибка отправки заказа:', error);
-            this.events.emit('order:error', { error });
-            throw error;
-        }
+    setOrderId(orderId: string): void {
+        this.state.orderId = orderId;
+        this.events.emit('order:submitted', { orderId, order: this.state });
     }
 
     getState(): IOrderState {
         return { ...this.state };
     }
 
-    getItems(): IProductItem[] {
-        return [...this.state.items];
+    getFormData(): IOrderFormData | undefined {
+        return this.state.formData;
     }
 
-    getTotal(): number {
-        return this.state.total;
+    getContacts(): IOrderContacts | undefined {
+        return this.state.contacts;
     }
 
     getOrderId(): string | undefined {
@@ -101,20 +123,21 @@ export class Order {
     isReadyToSubmit(): boolean {
         return !!(
             this.state.formData &&
+            this.state.formData.payment &&
+            this.state.formData.address?.trim()
+        );
+    }
+
+    isReadyToSubmitContacts(): boolean {
+        return !!(
             this.state.contacts &&
-            this.state.items.length > 0
+            this.state.contacts.email?.trim() &&
+            this.state.contacts.phone?.trim()
         );
     }
 
     clear(): void {
-        this.state = {
-            items: [],
-            total: 0
-        };
+        this.state = {};
         this.events.emit('order:cleared');
-    }
-
-    hasItems(): boolean {
-        return this.state.items.length > 0;
     }
 }

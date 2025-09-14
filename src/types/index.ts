@@ -37,5 +37,4 @@ export interface IOrderResult {
 	total: number;
 }
 
-// тип ошибки формы
 export type FormErrors = Partial<Record<keyof IOrder, string>>;

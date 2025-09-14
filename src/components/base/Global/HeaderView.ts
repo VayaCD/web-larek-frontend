@@ -12,17 +12,13 @@ export class HeaderView {
         if (!this.basketCounter || !this.basketButton) {
             throw new Error('Header elements not foundd');
         }
-
+        
         this.setupEventListeners();
     }
 
     private setupEventListeners(): void {
         this.basketButton.addEventListener('click', () => {
             this.eventEmitter.emit('header:basket-click');
-        });
-
-        this.eventEmitter.on('basket:update', (data: { items: IProductItem[]; total: number }) => {
-            this.updateBasketCounter(data.items.length);
         });
     }
 

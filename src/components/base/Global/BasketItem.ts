@@ -7,9 +7,6 @@ export class BasketItem {
     private titleElement: HTMLElement;
     private priceElement: HTMLElement;
     private deleteButton: HTMLButtonElement;
-    private product: IProductItem | null = null;
-    private index: number = 0;
-    private onDelete: ((productId: string) => void) | null = null;
 
     constructor() {
         const template = document.querySelector('#card-basket') as HTMLTemplateElement;
@@ -23,25 +20,26 @@ export class BasketItem {
         this.setupEventListeners();
     }
 
-    updateData(product: IProductItem, index: number, onDelete: (productId: string) => void): void {
-        this.product = product;
-        this.index = index;
-        this.onDelete = onDelete;
-        this.render();
+    public render(): HTMLElement {
+        return this.element;
     }
 
-    private render(): void {
-        if (!this.product) return;
-        
-        this.indexElement.textContent = (this.index + 1).toString();
-        this.titleElement.textContent = this.product.title;
-        this.priceElement.textContent = `${this.product.price} синапсов`;
+    public setContent(product: IProductItem, index: number): void {
+        this.indexElement.textContent = (index + 1).toString();
+        this.titleElement.textContent = product.title;
+        this.titleElement.setAttribute('data-product-id', product.id);
+        this.priceElement.textContent = `${product.price} синапсов`;
     }
 
     private setupEventListeners(): void {
         this.deleteButton.addEventListener('click', () => {
-            if (this.product && this.onDelete) {
-                this.onDelete(this.product.id);
+            const productId = this.titleElement.getAttribute('data-product-id');
+            if (productId) {
+                const event = new CustomEvent('basket:remove', {
+                    detail: { productId },
+                    bubbles: true
+                });
+                this.element.dispatchEvent(event);
             }
         });
     }
