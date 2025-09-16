@@ -74,4 +74,8 @@ export class Modal {
     getContent(): HTMLElement {
         return this.modalContent;
     }
+
+    isOpen(): boolean {
+        return this.element.classList.contains('modal_active');
+    }
 }

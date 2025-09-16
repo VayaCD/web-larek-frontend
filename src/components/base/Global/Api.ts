@@ -22,7 +22,6 @@ export class ProductsApi extends Api {
                 return items;
             })
             .catch(error => {
-                console.error('API error:', error);
                 throw error;
             });
     }
@@ -32,7 +31,6 @@ export class ProductsApi extends Api {
                 return response;
             })
             .catch(error => {
-                console.error('Order API error:', error);
                 throw error;
             });
     }

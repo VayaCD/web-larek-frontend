@@ -19,7 +19,7 @@ import { Order } from './components/base/Global/Order';
 const API_URL = `${process.env.API_ORIGIN}/api/weblarek`;
 const events = new EventEmitter();
 const api = new ProductsApi(API_URL);
-const basket = new Basket();
+const basket = new Basket(events);
 const products = new Products(events);
 const order = new Order(events);
 const modal = new Modal(document.querySelector('#modal-container') as HTMLElement);
@@ -32,28 +32,6 @@ const orderView = new OrderView(events);
 const contactsView = new ContactsView(events);
 const headerView = new HeaderView(events);
 
-
-const basketItemPool: BasketItem[] = [];
-
-events.on('basket:change', () => {
-});
-events.on('basket:request-list-update', () => {
-    const basketItems = basket.getItems();
-    const total = basketItems.reduce((sum, item) => sum + (item.price || 0), 0);
-    
-    while (basketItemPool.length < basketItems.length) {
-        basketItemPool.push(new BasketItem());
-    }
-    
-    const itemElements = basketItems.map((item, index) => {
-        const basketItem = basketItemPool[index];
-        basketItem.setContent(item, index);
-        
-        return basketItem.render();
-    });
-    
-    basketView.setList(itemElements, total);
-});
 
 events.on('card:click', (data: { productId: string }) => {
     const product = products.getProductById(data.productId);
@@ -71,14 +49,10 @@ events.on('card:click', (data: { productId: string }) => {
 
 events.on('basket:add', (data: { product: IProductItem }) => {
     basket.addItem(data.product);
-    updateBasketState();
-    updatePreviewState();
 });
 
 events.on('basket:remove', (data: { productId: string }) => {
     basket.removeItem(data.productId);
-    updateBasketState();
-    updatePreviewState();
 });
 
 document.addEventListener('basket:remove', (event: CustomEvent) => {
@@ -87,39 +61,37 @@ document.addEventListener('basket:remove', (event: CustomEvent) => {
 
 events.on('basket:clear', () => {
     basket.clear();
+});
+
+events.on('basket:changed', () => {
     updateBasketState();
-    updatePreviewState();
+});
+
+events.on('basket:request-list-update', () => {
+    const basketItems = basket.getItems();
+    const total = basketItems.reduce((sum, item) => sum + (item.price || 0), 0);
+    
+    const itemElements = basketItems.map((item, index) => {
+        const basketItem = new BasketItem();
+        basketItem.setContent(item, index);
+        return basketItem.render();
+    });
+    
+    basketView.setList(itemElements, total);
+    
+    if (modal.isOpen() && modal.getContent().querySelector('.basket')) {
+        const content = basketView.render();
+        modal.setContent(content);
+    }
 });
 
 
 function updateBasketState(): void {
     const items = basket.getItems();
     headerView.updateBasketCounter(items.length);
-    
-        if (modal.element.classList.contains('modal_active')) {
-            const currentContent = modal.getContent();
-            if (currentContent && currentContent.querySelector('.basket')) {
-                events.emit('basket:request-list-update');
-                const content = basketView.render();
-                modal.setContent(content);
-            }
-        }
+    events.emit('basket:request-list-update');
 }
 
-function updatePreviewState(): void {
-    if (modal.element.classList.contains('modal_active')) {
-        const currentContent = modal.getContent();
-        if (currentContent && currentContent.querySelector('.card__button')) {
-            const title = currentContent.querySelector('.card__title') as HTMLElement;
-            const productId = title?.getAttribute('data-product-id');
-            
-            if (productId) {
-                const isInBasket = basket.hasItem(productId);
-                previewView.setButtonState(isInBasket);
-            }
-        }
-    }
-}
 
 events.on('product:add-to-basket', (data: { productId: string }) => {
     const product = products.getProductById(data.productId);
@@ -133,15 +105,14 @@ events.on('basket:get-state', (data: { callback: (items: IProductItem[]) => void
 });
 
 events.on('header:basket-click', () => {
-    events.emit('basket:request-list-update');
     const content = basketView.render();
     modal.setContent(content);
     modal.open();
 });
+
 events.on('basket:checkout', () => {
     const items = basket.getItems();
     const total = items.reduce((sum, item) => sum + (item.price || 0), 0);
-    console.log('Basket checkout:', { items, total });
     modal.close();
     
     const content = orderView.render();
@@ -171,14 +142,11 @@ events.on('order:validate', (data: { errors: { [key: string]: string } }) => {
 });
 
 events.on('order:submit', () => {
-    if (order.isReadyToSubmit()) {
-        console.log('Order step1 complete:', order.getFormData());
-        modal.close();
-        
-        const content = contactsView.render();
-        modal.setContent(content);
-        modal.open();
-    }
+    modal.close();
+    
+    const content = contactsView.render();
+    modal.setContent(content);
+    modal.open();
 });
 
 events.on('contacts:change', (data: { key: string; value: string }) => {
@@ -195,32 +163,41 @@ events.on('contacts:validate', (data: { errors: { [key: string]: string } }) => 
 });
 
 events.on('contacts:submit', () => {
-    if (order.isReadyToSubmitContacts()) {
-        events.emit('order:final-submit', {
-            contactsData: order.getContacts()
-        });
-    }
+    events.emit('order:final-submit', {
+        contactsData: order.getContacts()
+    });
 });
 
 events.on('order:final-submit', async (data: any) => {
     try {
-        console.log('Order submit data:', data);
         
         const basketItems = basket.getItems();
         const basketTotal = basketItems.reduce((sum, item) => sum + (item.price || 0), 0);
         const basketItemIds = basketItems.map(item => item.id);
         
-        const orderData = order.getOrderData(basketItemIds, basketTotal);
+        const formData = order.getFormData();
+        const contacts = order.getContacts();
+        
+        if (!formData || !contacts) {
+            throw new Error('Не все данные заказа заполнены');
+        }
+        
+        const orderData = {
+            payment: formData.payment,
+            address: formData.address,
+            email: contacts.email,
+            phone: contacts.phone,
+            total: basketTotal,
+            items: basketItemIds
+        };
         
         const response = await api.createOrder(orderData);
         const orderId = response.id;
         
         order.setOrderId(orderId);
         
-        console.log('Order created successfully:', orderId);
         basket.clear();
-        updateBasketState();
-        console.log('Basket cleared after successful order');
+        order.clear();
 
         modal.close();
         successView.setContent(basketTotal);
@@ -229,15 +206,11 @@ events.on('order:final-submit', async (data: any) => {
         modal.open();
         
     } catch (error) {
-        console.error('Failed to create order:', error);
         alert('Произошла ошибка при оформлении заказа: ' + error);
     }
 });
 
 events.on('order:complete', () => {
-    basket.clear();
-    order.clear();
-    updateBasketState();
     modal.close();
 });
 
@@ -255,11 +228,6 @@ async function initProducts() {
         
         galleryView.renderCards(cards);
     } catch (error) {
-        console.error('Подробности ошибки:', {
-            message: error.message,
-            status: error.status,
-            url: API_URL + '/product'
-        });
     }
 }
 
@@ -270,8 +238,6 @@ function createProductCards(products: IProductItem[]): HTMLElement[] {
         return card.getElement();
     });
 }
-
-updateBasketState();
 
 initProducts();
 

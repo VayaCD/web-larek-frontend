@@ -76,6 +76,7 @@ export class PreviewView {
         }
     }
 
+
     private setupEventListeners(): void {
         this.button.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -86,10 +87,12 @@ export class PreviewView {
             if (!productId) return;
             
             if (isInBasket) {
+                this.setButtonState(false); // Убираем из корзины
                 this.eventEmitter.emit('basket:remove', { 
                     productId: productId 
                 });
             } else {
+                this.setButtonState(true); // Добавляем в корзину
                 this.eventEmitter.emit('product:add-to-basket', { 
                     productId: productId 
                 });
@@ -97,5 +100,6 @@ export class PreviewView {
             
             this.eventEmitter.emit('modal:close');
         });
+
     }
 }

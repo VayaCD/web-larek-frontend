@@ -52,9 +52,11 @@ export class BasketView {
         }
     }
 
+
     private setupEventListeners(): void {
         this.checkoutButton.addEventListener('click', () => {
             this.eventEmitter.emit('basket:checkout');
         });
+
     }
 }

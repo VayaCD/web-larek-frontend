@@ -11,7 +11,6 @@ export class GalleryView {
 
     public renderCards(cards: HTMLElement[]): void {
         if (!Array.isArray(cards)) {
-            console.error('Invalid cards format:', cards);
             return;
         }
         
