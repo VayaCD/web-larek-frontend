@@ -69,7 +69,7 @@ events.on('basket:changed', () => {
 
 events.on('basket:request-list-update', () => {
     const basketItems = basket.getItems();
-    const total = basketItems.reduce((sum, item) => sum + (item.price || 0), 0);
+    const total = basket.getTotalPrice();
     
     const itemElements = basketItems.map((item, index) => {
         const basketItem = new BasketItem();
@@ -100,10 +100,6 @@ events.on('product:add-to-basket', (data: { productId: string }) => {
     }
 });
 
-events.on('basket:get-state', (data: { callback: (items: IProductItem[]) => void }) => {
-    data.callback(basket.getItems());
-});
-
 events.on('header:basket-click', () => {
     const content = basketView.render();
     modal.setContent(content);
@@ -111,8 +107,6 @@ events.on('header:basket-click', () => {
 });
 
 events.on('basket:checkout', () => {
-    const items = basket.getItems();
-    const total = items.reduce((sum, item) => sum + (item.price || 0), 0);
     modal.close();
     
     const content = orderView.render();
@@ -172,7 +166,7 @@ events.on('order:final-submit', async (data: any) => {
     try {
         
         const basketItems = basket.getItems();
-        const basketTotal = basketItems.reduce((sum, item) => sum + (item.price || 0), 0);
+        const basketTotal = basket.getTotalPrice();
         const basketItemIds = basketItems.map(item => item.id);
         
         const formData = order.getFormData();
@@ -198,6 +192,10 @@ events.on('order:final-submit', async (data: any) => {
         
         basket.clear();
         order.clear();
+        
+        // Сбрасываем поля форм
+        orderView.reset();
+        contactsView.reset();
 
         modal.close();
         successView.setContent(basketTotal);
@@ -218,15 +216,15 @@ events.on('modal:close', () => {
     modal.close();
 });
 
+events.on('products:loaded', (data: { products: IProductItem[] }) => {
+    const cards = createProductCards(data.products);
+    galleryView.renderCards(cards);
+});
+
 async function initProducts() {
     try {
         const loadedProducts = await api.getProducts();
-        
         products.setProducts(loadedProducts);
-        
-        const cards = createProductCards(loadedProducts);
-        
-        galleryView.renderCards(cards);
     } catch (error) {
     }
 }

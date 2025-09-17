@@ -51,4 +51,16 @@ export class OrderView {
             ? errors.map(error => `<div class="modal__message modal__message_error">${error}</div>`).join('')
             : '';
     }
+
+    public reset(): void {
+        // Сбрасываем кнопки оплаты
+        this.paymentButtons.forEach(btn => btn.classList.remove('button_alt-active'));
+        
+        // Очищаем поле адреса
+        this.addressInput.value = '';
+        
+        // Очищаем ошибки
+        this.errorsContainer.innerHTML = '';
+        this.nextButton.disabled = false;
+    }
 }
