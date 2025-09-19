@@ -109,6 +109,9 @@ events.on('header:basket-click', () => {
 events.on('basket:checkout', () => {
     modal.close();
     
+    orderView.reset();
+    events.emit('order:validate', { errors: { payment: 'Выберите способ оплаты', address: 'Введите адрес доставки' } });
+    
     const content = orderView.render();
     modal.setContent(content);
     modal.open();
@@ -136,7 +139,15 @@ events.on('order:validate', (data: { errors: { [key: string]: string } }) => {
 });
 
 events.on('order:submit', () => {
+    const formData = order.getFormData();
+    if (!formData || !formData.payment || !formData.address?.trim()) {
+        return;
+    }
+    
     modal.close();
+    
+    contactsView.reset();
+    events.emit('contacts:validate', { errors: { email: 'Введите email', phone: 'Введите телефон' } });
     
     const content = contactsView.render();
     modal.setContent(content);
@@ -157,8 +168,13 @@ events.on('contacts:validate', (data: { errors: { [key: string]: string } }) => 
 });
 
 events.on('contacts:submit', () => {
+    const contacts = order.getContacts();
+    if (!contacts || !contacts.email?.trim() || !contacts.phone?.trim()) {
+        return;
+    }
+    
     events.emit('order:final-submit', {
-        contactsData: order.getContacts()
+        contactsData: contacts
     });
 });
 
@@ -171,10 +187,6 @@ events.on('order:final-submit', async (data: any) => {
         
         const formData = order.getFormData();
         const contacts = order.getContacts();
-        
-        if (!formData || !contacts) {
-            throw new Error('Не все данные заказа заполнены');
-        }
         
         const orderData = {
             payment: formData.payment,
@@ -193,7 +205,6 @@ events.on('order:final-submit', async (data: any) => {
         basket.clear();
         order.clear();
         
-        // Сбрасываем поля форм
         orderView.reset();
         contactsView.reset();
 

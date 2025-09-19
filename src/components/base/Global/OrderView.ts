@@ -53,13 +53,10 @@ export class OrderView {
     }
 
     public reset(): void {
-        // Сбрасываем кнопки оплаты
         this.paymentButtons.forEach(btn => btn.classList.remove('button_alt-active'));
         
-        // Очищаем поле адреса
         this.addressInput.value = '';
         
-        // Очищаем ошибки
         this.errorsContainer.innerHTML = '';
         this.nextButton.disabled = false;
     }

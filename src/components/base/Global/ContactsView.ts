@@ -50,11 +50,9 @@ export class ContactsView {
     }
 
     public reset(): void {
-        // Очищаем поля ввода
         this.emailInput.value = '';
         this.phoneInput.value = '';
         
-        // Очищаем ошибки
         this.errorsContainer.innerHTML = '';
         this.payButton.disabled = false;
     }
