@@ -58,5 +58,8 @@ export class BasketView {
             this.eventEmitter.emit('basket:checkout');
         });
 
+        this.listElement.addEventListener('basket:remove', (event: CustomEvent) => {
+            this.eventEmitter.emit('basket:remove', { productId: event.detail.productId });
+        });
     }
 }

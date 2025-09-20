@@ -55,9 +55,6 @@ events.on('basket:remove', (data: { productId: string }) => {
     basket.removeItem(data.productId);
 });
 
-document.addEventListener('basket:remove', (event: CustomEvent) => {
-    events.emit('basket:remove', { productId: event.detail.productId });
-});
 
 events.on('basket:clear', () => {
     basket.clear();
